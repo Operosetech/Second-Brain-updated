@@ -12,7 +12,7 @@ def chunk_text(text: str, chunk_size: int = 1500) -> List[str]:
             
         paragraphs = text.split("\n\n")
         chunks = []
-        current_chunk = ""
+        current_chunk = ""  
         
         for p in paragraphs:
             if len(current_chunk) + len(p) < chunk_size:
