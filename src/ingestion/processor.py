@@ -1,18 +1,18 @@
 import os
 import sys
 import uuid
-import json
+import json 
 import logfire
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-from app.config import settings
-from app.services.retrieval.embedding import embed_texts, get_embedding_dim
-from app.ingestion.loaders.pdf import parse_pdf
-from app.ingestion.loaders.html import parse_html
-from app.ingestion.loaders.text import parse_text
-from app.ingestion.chunking.splitter import chunk_text
+from src.config import settings
+from src.retrieval.embeddings import embed_texts, get_embedding_dim
+from src.ingestion.loaders.pdf import parse_pdf
+from src.ingestion.loaders.html import parse_html
+from src.ingestion.loaders.text import parse_text
+from src.ingestion.chunking.splitter import chunk_text
 
 logfire.configure(service_name="enterprise-ingestion-service")
 
@@ -49,7 +49,7 @@ def process_file(file_path: str, filename: str, source_type: str):
             elif ext == "txt":
                 full_text = parse_text(file_path)
             elif ext in ("docx", "pptx"):
-                from app.ingestion.loaders.office import parse_office
+                from src.ingestion.loaders.office import parse_office
                 full_text = parse_office(file_path)
             else:
                 logfire.warning(f"Skipping unsupported file type: {filename}")
