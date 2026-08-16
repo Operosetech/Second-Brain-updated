@@ -8,8 +8,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
 from src.config import settings
+
 from src.retrieval.embeddings import embed_texts, get_embedding_dim
-from src.ingestion.loaders.pdf import parse_pdf
+
+from src.ingestion.loaders.pdf import parse_pdf     
 from src.ingestion.loaders.html import parse_html
 from src.ingestion.loaders.text import parse_text
 from src.ingestion.chunking.splitter import chunk_text
@@ -130,7 +132,7 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
                 vectors_config=models.VectorParams(
                     size=dim,
                     distance=models.Distance.COSINE,
-                ),
+                ), 
             )
             logfire.info(
                 f"Created collection '{settings.QDRANT_COLLECTION}' "
