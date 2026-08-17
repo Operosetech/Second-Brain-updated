@@ -55,5 +55,5 @@ def parse_pdf(file_path: str) -> str:
 
 if __name__ == "__main__":
     pdf_directory = "/path/to/your/pdfs"
-    resurlt = parse_pdf(pdf_directory)
-    
+    result = parse_pdf(pdf_directory)
+    print(result)

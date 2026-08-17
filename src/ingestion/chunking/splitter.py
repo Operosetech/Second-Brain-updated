@@ -15,7 +15,14 @@ def chunk_text(text: str, chunk_size: int = 1500) -> List[str]:
         current_chunk = ""  
         
         for p in paragraphs:
-            if len(current_chunk) + len(p) < chunk_size:
+            # Hard-split any paragraph that is itself larger than chunk_size
+            if len(p) >= chunk_size:
+                if current_chunk.strip():
+                    chunks.append(current_chunk.strip())
+                    current_chunk = ""
+                for start in range(0, len(p), chunk_size):
+                    chunks.append(p[start : start + chunk_size].strip())
+            elif len(current_chunk) + len(p) < chunk_size:
                 current_chunk += p + "\n\n"
             else:
                 if current_chunk.strip():

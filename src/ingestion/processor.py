@@ -7,7 +7,7 @@ import logfire
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
 
-from src.config import settings
+from src.config.config import settings
 
 from src.retrieval.embeddings import embed_texts, get_embedding_dim
 
@@ -16,16 +16,24 @@ from src.ingestion.loaders.html import parse_html
 from src.ingestion.loaders.text import parse_text
 from src.ingestion.chunking.splitter import chunk_text
 
-logfire.configure(service_name="enterprise-ingestion-service")
-
-# Local folder where parsed + chunked JSON metadata is saved (replaces GCS processed bucket)
+# Local folder where parsed + chunked JSON metadata is saved
 PROCESSED_DATA_DIR = "processed_data"
 
-# Initialize Qdrant Client
-qdrant_client = QdrantClient(
-    url=settings.QDRANT_URL,
-    api_key=settings.QDRANT_API_KEY,
-)
+# Lazy Qdrant client — instantiated on first use so a missing env var
+# raises a clear error at call time, not silently at import time.
+_qdrant_client: QdrantClient | None = None
+
+def _get_qdrant() -> QdrantClient:
+    """Return (and lazily create) the shared Qdrant client."""
+    global _qdrant_client
+    if _qdrant_client is None:
+        if not settings.QDRANT_URL:
+            raise EnvironmentError("QDRANT_CLUSTER_ENDPOINT is not set in your .env file.")
+        _qdrant_client = QdrantClient(
+            url=settings.QDRANT_URL,
+            api_key=settings.QDRANT_API_KEY,
+        )
+    return _qdrant_client
 
 
 def save_processed_locally(data: dict, source_type: str, filename: str) -> str:
@@ -72,7 +80,9 @@ def process_file(file_path: str, filename: str, source_type: str):
                 "source_type": source_type,
                 "chunks": chunks,
             }
-            local_path = save_processed_locally(processed_data, source_type, filename)
+            # Strip extension so the output file is e.g. "report.json" not "report.pdf.json"
+            base_name = os.path.splitext(filename)[0]
+            local_path = save_processed_locally(processed_data, source_type, base_name)
             logfire.info(f"Saved processed data → {local_path}")
 
             # 4. Embed and index in Qdrant
@@ -91,7 +101,7 @@ def process_file(file_path: str, filename: str, source_type: str):
                     for chunk, vector in zip(chunks, embeddings)
                 ]
 
-                qdrant_client.upsert(
+                _get_qdrant().upsert(
                     collection_name=settings.QDRANT_COLLECTION,
                     points=points,
                 )
@@ -99,6 +109,7 @@ def process_file(file_path: str, filename: str, source_type: str):
 
         except Exception as e:
             logfire.error(f"Failed to process {filename}: {e}")
+            raise  # Re-raise so the caller knows this file failed
 
 
 def process_directory(dir_path: str, source_type: str):
@@ -120,19 +131,19 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
         # Wipe collection if requested
         if wipe:
             with logfire.span("Wiping Collection"):
-                if qdrant_client.collection_exists(settings.QDRANT_COLLECTION):
-                    qdrant_client.delete_collection(settings.QDRANT_COLLECTION)
+                if _get_qdrant().collection_exists(settings.QDRANT_COLLECTION):
+                    _get_qdrant().delete_collection(settings.QDRANT_COLLECTION)
                     logfire.info(f"Collection '{settings.QDRANT_COLLECTION}' deleted.")
 
         # Recreate collection — dimension resolved at runtime after embedding model probe
-        if not qdrant_client.collection_exists(settings.QDRANT_COLLECTION):
+        if not _get_qdrant().collection_exists(settings.QDRANT_COLLECTION):
             dim = get_embedding_dim()
-            qdrant_client.create_collection(
+            _get_qdrant().create_collection(
                 collection_name=settings.QDRANT_COLLECTION,
                 vectors_config=models.VectorParams(
                     size=dim,
                     distance=models.Distance.COSINE,
-                ), 
+                ),
             )
             logfire.info(
                 f"Created collection '{settings.QDRANT_COLLECTION}' "
@@ -169,8 +180,12 @@ def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wip
 
 if __name__ == "__main__":
     # Usage:
-    #   python -m app.ingestion.processor DATA --wipe
-    #   python -m app.ingestion.processor DATA/true_data true
+    #   python -m src.ingestion.processor DATA --wipe
+    #   python -m src.ingestion.processor DATA/true_data true
+
+    # Configure logfire only when running this file directly, not on import
+    logfire.configure(service_name="enterprise-ingestion-service")
+
     wipe_requested = "--wipe" in sys.argv
     clean_args = [a for a in sys.argv if a != "--wipe"]
 
@@ -184,4 +199,3 @@ if __name__ == "__main__":
     run_universal_ingestion(target_dir, explicit_source_type=explicit_type, wipe=wipe_requested)
     logfire.info("Ingestion job completed.")
 
-    #comment added
