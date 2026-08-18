@@ -113,12 +113,17 @@ def process_file(file_path: str, filename: str, source_type: str):
 
 
 def process_directory(dir_path: str, source_type: str):
-    """Process every file in a directory."""
+    """Recursively process every file under dir_path (all nested sub-folders included)."""
     with logfire.span("Scanning Directory", path=dir_path, source=source_type):
-        files = [f for f in os.listdir(dir_path) if os.path.isfile(os.path.join(dir_path, f))]
-        logfire.info(f"Found {len(files)} files in {dir_path}.")
-        for filename in files:
-            process_file(os.path.join(dir_path, filename), filename, source_type)
+        all_files = [
+            os.path.join(root, filename)
+            for root, _dirs, files in os.walk(dir_path)
+            for filename in files
+        ]
+        logfire.info(f"Found {len(all_files)} files (recursive) under {dir_path}.")
+        for file_path in all_files:
+            filename = os.path.basename(file_path)
+            process_file(file_path, filename, source_type)
 
 
 def run_universal_ingestion(base_dir: str, explicit_source_type: str = None, wipe: bool = False):

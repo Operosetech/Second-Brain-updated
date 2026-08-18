@@ -24,7 +24,7 @@ def parse_pdf(file_path: str) -> str:
                 else:
                     blank_pages.append(i) # Save the index (0-based) for later
 
-           # 3. Pass 2 (pdfplumber): Fill in the missing slots
+           # 3. Pass 2 (pdfplumber): Fill in the missing slots  
             if blank_pages:
                 logfire.info(f"pypdf returned blank on pages {blank_pages} — retrying.")
                 try:
