@@ -1,14 +1,15 @@
 import logfire
+
 from src.agents.state import AgentState
 from src.retrieval.qdrant_service import search_enterprise_knowledge
 from src.retrieval.ranking_service import rerank_documents
+
 
 def retrieve_node(state: AgentState):
     """
     Performs vector search and semantic reranking for technical queries.
     """
     query = state["current_query"]
-    
     
     # Standard Retrieval Logic
     with logfire.span("🔍 Knowledge Retrieval"):
