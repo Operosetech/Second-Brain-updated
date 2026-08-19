@@ -1,5 +1,5 @@
 import logfire
-from src.agents import AgentState
+from src.agents.state import AgentState
 from src.config.config import settings
 from langchain_groq import ChatGroq
 
