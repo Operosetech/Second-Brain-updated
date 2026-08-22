@@ -27,8 +27,9 @@ def planner_node(state:AgentState):
     "{user_message}"
     
     Task:
-    1. If the latest message is a greeting (hi, hello) or a question that can be answered using ONLY the conversation history above (e.g., "what is my name"), respond with 'CONVERSATIONAL'.
-    2. If it is a technical question about Kubernetes, Intel, or Networking that requires fresh documentation, output a refined search query.
+    1. If the latest message is a greeting, a general knowledge question, or a question that can be answered using ONLY the conversation history above, respond with 'CONVERSATIONAL'.
+    2. If it is a technical enterprise question about Kubernetes, Intel, Networking, or the indexed Odoo documentation that requires fresh documentation, output a refined search query.
+    3. Do not create a search query for unrelated everyday questions like cooking, coffee, travel, jokes, or casual chat.
     
     Output ONLY 'CONVERSATIONAL' or the search query.
     """
