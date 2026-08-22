@@ -1,0 +1,35 @@
+# Secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Data & models (often large)
+data/
+processed_data/
+*.pkl
+*.faiss
+
+# Logfire / other local state
+.logfire/
+.deepeval/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
