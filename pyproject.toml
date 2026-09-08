@@ -53,6 +53,9 @@ dependencies = [
     "streamlit>=1.61.1",
     "tenacity>=9.1.4",
     "torch>=2.13.0",
+    # Transformers 5.x can hang during import on macOS ARM with Python 3.12.
+    # Keep the sentence-transformers stack on the stable 4.x release line.
+    "transformers>=4.41,<5",
     "unstructured>=0.25.2",
     "uvicorn[standard]>=0.51.0",
 ]

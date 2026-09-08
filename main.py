@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from typing import Optional
 
 from src.agents.graph import rag_agent
+from src.guardrails.rails import guard
+import asyncio
 
 logfire.configure(send_to_logfire="if-token-present", service_name="rag-project")
 
@@ -49,24 +51,25 @@ def query(request: QueryRequest):
         "documents": [],
         "plan": ["Start"],
         "status": "Initializing Graph...",
-        "final_answer": ""
+        "final_answer": "",
+        "is_conversational": False
     }
     
     # Configuration for Memory (Thread ID)
     config = {"configurable": {"thread_id": thread_id}}
     
     try:
-        # # Gate 1: NeMo Guardrails — blocks off-topic, jailbreaks, and handles dialog
-        # rail_fired, rail_response = guard(q)
-        # if rail_fired:
-        #     logfire.info(f"🛡️ Request blocked by guardrails | thread={thread_id}")
-        #     return {
-        #         "question": q,
-        #         "answer": rail_response,
-        #         "thought_process": ["Intent: Guardrails Fired", "Retrieval: Skipped"],
-        #         "status": "Blocked by guardrails.",
-        #         "sources": []
-        #     }
+        # Gate 1: NeMo Guardrails — blocks off-topic, jailbreaks, and handles dialog
+        rail_fired, rail_response = guard(q)
+        if rail_fired:
+            logfire.info(f"🛡️ Request blocked by guardrails | thread={thread_id}")
+            return {
+                "question": q,
+                "answer": rail_response,
+                "thought_process": ["Intent: Guardrails Fired", "Retrieval: Skipped"],
+                "status": "Blocked by guardrails.",
+                "sources": []
+            }
 
         # Gate 2: LangGraph RAG pipeline
         # Run the graph synchronously to preserve Logfire context variables
@@ -107,22 +110,38 @@ async def stream_query(request: QueryRequest):
         "documents": [],
         "plan": ["Start"],
         "status": "Initializing Graph...",
-        "final_answer": ""
+        "final_answer": "",
+        "is_conversational": False
     }
 
     config = {"configurable": {"thread_id": thread_id}}
 
     async def event_generator():
         try:
-            # stream_mode="messages" yields (AIMessageChunk, metadata) tuples
-            # as the LLM produces tokens
-            async for chunk, metadata in rag_agent.astream(
-                initial_state, config=config, stream_mode="messages"
+            # Gate 1: NeMo Guardrails — blocks off-topic, jailbreaks, and handles dialog
+            rail_fired, rail_response = await asyncio.to_thread(guard, q)
+            if rail_fired:
+                logfire.info(f"🛡️ Request blocked by guardrails | thread={thread_id}")
+                yield f"data: {json.dumps({'token': rail_response})}\n\n"
+                return
+
+            # stream_mode=["messages", "values"] yields both token chunks and state updates
+            async for event in rag_agent.astream(
+                initial_state, config=config, stream_mode=["messages", "values"]
             ):
-                # chunk is an AIMessageChunk; only forward non-empty text
-                token = getattr(chunk, "content", "")
-                if token:
-                    yield f"data: {json.dumps({'token': token})}\n\n"
+                mode, data = event
+                if mode == "messages":
+                    chunk, metadata = data
+                    # Only stream tokens from the responder node, otherwise we leak planner thoughts!
+                    if metadata.get("langgraph_node") == "responder":
+                        token = getattr(chunk, "content", "")
+                        if token:
+                            yield f"data: {json.dumps({'token': token})}\n\n"
+                            await asyncio.sleep(0.01)
+                elif mode == "values":
+                    plan = data.get("plan", [])
+                    docs = data.get("documents", [])
+                    yield f"data: {json.dumps({'metadata': {'plan': plan, 'sources': docs}})}\n\n"
         except Exception as e:
             traceback.print_exc()
             logfire.exception(f"Streaming failed: {e}")
@@ -154,11 +173,10 @@ if __name__ == "__main__":
 
     ui_proc = None
 
-    def start_vite():
-        """Start the Vite dev server for the React UI."""
+    def start_streamlit():
+        """Start the Streamlit UI."""
         global ui_proc
-        # Prefer npx so it works even without a global npm install
-        cmd = ["npm", "run", "dev"]
+        cmd = ["streamlit", "run", "app.py", "--server.port", "8501"]
         ui_proc = subprocess.Popen(cmd, cwd=UI_DIR)
         ui_proc.wait()
 
@@ -172,8 +190,8 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, shutdown)
 
     if start_ui and os.path.isdir(UI_DIR):
-        print("🖥️  Starting React UI  → http://localhost:5173")
-        ui_thread = threading.Thread(target=start_vite, daemon=True)
+        print("🖥️  Starting Streamlit UI  → http://localhost:8501")
+        ui_thread = threading.Thread(target=start_streamlit, daemon=True)
         ui_thread.start()
     elif not os.path.isdir(UI_DIR):
         print("⚠️  No 'ui/' directory found — skipping UI. Run with --no-ui to suppress this warning.")

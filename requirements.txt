@@ -15,6 +15,7 @@ nest-asyncio                # Support for nested async loops in notebooks/stream
 # --- JINA API EMBEDDINGS + LOCAL FALLBACK ---
 sentence-transformers       # Local fallback embeddings (mxbai-embed-large-v1)
 torch                        # Required by sentence-transformers
+transformers>=4.41,<5        # Avoid 5.x import hangs on macOS ARM/Python 3.12
 
 # --- VECTOR DB & RETRIEVAL ---
 qdrant-client               # Vector Database for semantic search

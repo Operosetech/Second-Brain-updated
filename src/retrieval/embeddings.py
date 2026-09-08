@@ -1,6 +1,6 @@
 import time
 import logfire
-from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from google import genai
 from src.config.config import settings   
 
 BATCH_SIZE = 50
@@ -9,20 +9,23 @@ _FALLBACK_DIM = 768  # all-mpnet-base-v2
 
 _active_model = None
 _model_type: str | None = None  # "gemini" or "fallback"
+_gemini_client = genai.Client(api_key=settings.GEMINI_API_KEY) if settings.GEMINI_API_KEY else None
 
 
 # ── Model initialisation ───────────────────────────────────────────────────────
 
 def _probe_gemini():
     """Try one embed call to verify Gemini is reachable. Returns model or None."""
+    if _gemini_client is None:
+        logfire.warning("Gemini API key missing. Will use sentence-transformers fallback.")
+        return None
     try:
-        model = GoogleGenerativeAIEmbeddings(
-            model="models/gemini-embedding-2-preview",
-            google_api_key=settings.GEMINI_API_KEY,
+        _gemini_client.models.embed_content(
+            model="gemini-embedding-2-preview",
+            contents="probe",
         )
-        model.embed_query("probe")
         logfire.info("Gemini embeddings ready (gemini-embedding-2-preview, 3072-dim).")
-        return model
+        return _gemini_client
     except Exception as e:
         logfire.warning(f"Gemini probe failed: {e}. Will use sentence-transformers fallback.")
         return None
@@ -64,7 +67,11 @@ def _embed_batch(batch: list[str]) -> list[list[float]]:
         # Exponential backoff: 1 s → 2 s → 4 s → 8 s (4 attempts total)
         for attempt in range(4):
             try:
-                return _active_model.embed_documents(batch)
+                response = _active_model.models.embed_content(
+                    model="gemini-embedding-2-preview",
+                    contents=batch,
+                )
+                return [embedding.values or [] for embedding in (response.embeddings or [])]
             except Exception as e:
                 err = str(e).lower()
                 is_rate_limit = any(x in err for x in ("429", "rate", "quota", "resource_exhausted"))
@@ -88,7 +95,14 @@ def _embed_batch(batch: list[str]) -> list[list[float]]:
 def embed_query(query: str) -> list[float]:
     _init()
     if _model_type == "gemini":
-        return _active_model.embed_query(query)
+        response = _active_model.models.embed_content(
+            model="gemini-embedding-2-preview",
+            contents=query,
+        )
+        embeddings = response.embeddings or []
+        if not embeddings:
+            raise RuntimeError("Gemini returned no embedding for the query.")
+        return embeddings[0].values or []
     return _active_model.encode([query])[0].tolist()
 
 

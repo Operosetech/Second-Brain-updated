@@ -18,7 +18,7 @@ def generate_node(state:AgentState):
 
     user_msg=state["messages"][-1]["content"] if state["messages"] else ""
 
-    if query == "CONVERSATIONAL":
+    if state.get("is_conversational", False):
         logfire.info("Generating conversational response using memory. ")
         prompt=f"""
         You are a friendly and helpful Enterprise AI Assitant.
